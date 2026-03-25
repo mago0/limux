@@ -341,7 +341,7 @@ Restart and verify:
 - Limux warns that the unknown ID was ignored
 - `toggle_sidebar` still remaps correctly
 
-### 7. Invalid JSON Fallback
+### 10. Invalid JSON Fallback
 
 Write invalid JSON:
 
