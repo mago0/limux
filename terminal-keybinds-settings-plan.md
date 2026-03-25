@@ -86,9 +86,9 @@ T3 ── T4 ──┘
 - **location**: `rust/limux-host-linux/src/shortcut_config.rs`, `rust/limux-host-linux/src/keybind_editor.rs`, `rust/limux-host-linux/src/window.rs`, `docs/shortcut-remap-testing.md` or a new focused settings test doc if cleaner
 - **description**: Add focused regression coverage for the editor contract and update the manual verification doc to include the new settings surface. Favor pure tests around validation, serialization, and row-state helpers where possible, and add narrow UI-helper tests for row text or error formatting when GTK startup is avoidable. Document a manual smoke test that exercises: open terminal menu, open `Keybinds`, capture a valid combo, reject an invalid combo, reject a duplicate combo, close via X, and close via outside click.
 - **validation**: `cargo test -p limux-host-linux` covers the new canonical validation and persistence behavior, and the manual test doc provides a deterministic checklist for the interactive GTK-only behaviors.
-- **status**: Not Completed
-- **log**:
-- **files edited/created**:
+- **status**: Completed
+- **log**: Added focused keybind-editor helper coverage for binding-label and validation-error messaging, then updated `docs/shortcut-remap-testing.md` with the new terminal `Keybinds` popover flow, immediate live-apply behavior, close affordances, remap checklist, and validation checklist. Validation: `cargo test -p limux-host-linux`, `cargo build -p limux-host-linux --features webkit`, and live host launch via `cargo run -p limux-host-linux --features webkit --bin limux`.
+- **files edited/created**: `rust/limux-host-linux/src/keybind_editor.rs`, `docs/shortcut-remap-testing.md`, `terminal-keybinds-settings-plan.md`
 
 ## Parallel Execution Groups
 

@@ -30,12 +30,40 @@ If the file is missing, Limux uses built-in defaults.
 
 ## Important Runtime Behavior
 
-- Shortcuts are loaded once at startup.
-- After editing `~/.config/limux/config.json`, restart Limux.
+- Shortcuts are loaded at startup.
+- When you change them through the terminal `Keybinds` editor, Limux writes the config, reloads it, and applies the new bindings immediately in the running app.
+- If you edit `~/.config/limux/config.json` by hand outside the app, restart Limux to pick up those changes.
 - If the config file is invalid or unreadable, Limux falls back to defaults and prints a warning to stderr.
 - If two active shortcuts resolve to the same binding, Limux rejects the override set and falls back to defaults.
 - Unknown shortcut IDs are ignored with a warning.
 - `null` or `""` unbinds a shortcut.
+- Host shortcuts must use `Ctrl` or `Alt` as the base modifier. `Shift` can be added on top of that.
+
+## Keybinds Editor
+
+The terminal right-click menu now includes `Keybinds`.
+
+Selecting it opens a popover editor that:
+
+- lists every host-owned shortcut
+- shows the current binding
+- shows the default binding
+- lets you click a binding pill to enter listening mode
+- closes from the top-right `×` button
+- also closes when you click outside the popover
+
+Capture rules:
+
+- valid examples:
+  - `Ctrl+H`
+  - `Ctrl+Shift+H`
+  - `Alt+X`
+- rejected examples:
+  - plain `H`
+  - `Shift+H`
+  - modifier-only keys like `Ctrl`
+
+If a capture is invalid or duplicates another active shortcut, the row shows an inline error and keeps the previous working binding.
 
 ## Config Format
 
@@ -258,7 +286,44 @@ Restart Limux from a terminal and verify:
 - `Ctrl+B` toggles the sidebar
 - `Ctrl+D` still splits right
 
-### 6. Unknown ID Handling
+### 6. Open The Keybinds Editor
+
+Launch Limux, right-click inside a terminal, and verify:
+
+- the terminal context menu contains `Keybinds`
+- clicking `Keybinds` opens the keybind editor popover
+- the editor shows a row for every host-owned shortcut
+- each row shows both the current binding and the default binding
+- clicking the `×` button closes the popover
+- clicking outside the popover also closes it
+
+### 7. Remap From The Editor
+
+Launch Limux, open terminal `Keybinds`, click the `Split Right` binding, and press `Ctrl+H`.
+
+Verify:
+
+- the `Split Right` row updates to `Ctrl+H`
+- `~/.config/limux/config.json` contains the `split_right` override
+- `Ctrl+H` splits right immediately without restarting Limux
+- `Ctrl+D` no longer splits right
+- the pane header split-right tooltip now shows `Ctrl+H`
+
+### 8. Editor Validation
+
+Launch Limux, open terminal `Keybinds`, and try these invalid captures on any row:
+
+- press only `Shift+H`
+- press only `Ctrl`
+- assign a combo already used by another shortcut
+
+Verify:
+
+- the row shows an inline error
+- the previous binding remains visible after the error
+- the running app keeps the old working shortcut
+
+### 9. Unknown ID Handling
 
 Create:
 
