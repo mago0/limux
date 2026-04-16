@@ -44,6 +44,8 @@ pub struct AppConfig {
     pub appearance: AppearanceConfig,
     #[serde(skip)]
     pub font_size: Option<f32>,
+    #[serde(skip)]
+    pub sidebar: SidebarConfig,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -56,6 +58,19 @@ pub struct AppearanceConfig {
 pub struct FocusConfig {
     #[serde(default)]
     pub hover_terminal_focus: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SidebarConfig {
+    pub providers: Vec<String>,
+}
+
+impl Default for SidebarConfig {
+    fn default() -> Self {
+        Self {
+            providers: vec!["git.branch".to_string()],
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -155,6 +170,8 @@ fn parse_app_config_value(root: &Value) -> AppConfig {
         .map(|v| v as f32)
         .filter(|v| (1.0..=255.0).contains(v));
 
+    let sidebar = parse_sidebar_config(root);
+
     AppConfig {
         focus: FocusConfig {
             hover_terminal_focus,
@@ -164,7 +181,30 @@ fn parse_app_config_value(root: &Value) -> AppConfig {
             ghostty_color_scheme,
         },
         font_size,
+        sidebar,
     }
+}
+
+fn parse_sidebar_config(root: &Value) -> SidebarConfig {
+    let Some(sidebar) = root.get("sidebar").and_then(Value::as_object) else {
+        return SidebarConfig::default();
+    };
+
+    let Some(providers) = sidebar.get("providers").and_then(Value::as_array) else {
+        return SidebarConfig::default();
+    };
+
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(providers.len());
+    for value in providers {
+        if let Some(id) = value.as_str() {
+            let id = id.to_string();
+            if seen.insert(id.clone()) {
+                out.push(id);
+            }
+        }
+    }
+    SidebarConfig { providers: out }
 }
 
 pub fn save(config: &AppConfig) -> Result<(), String> {
@@ -570,5 +610,71 @@ mod tests {
         assert_eq!(loaded.config, AppConfig::default());
         assert_eq!(loaded.warnings.len(), 1);
         assert!(loaded.warnings[0].contains("failed to load app config"));
+    }
+
+    #[test]
+    fn load_from_path_defaults_sidebar_providers_when_section_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = settings_path_in(tmp.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"focus": {"hover_terminal_focus": false}}"#).unwrap();
+
+        let loaded = load_from_path(&path);
+
+        assert!(
+            loaded.warnings.is_empty(),
+            "warnings: {:?}",
+            loaded.warnings
+        );
+        assert_eq!(
+            loaded.config.sidebar.providers,
+            vec!["git.branch".to_string()]
+        );
+    }
+
+    #[test]
+    fn load_from_path_explicit_empty_sidebar_providers_is_honored() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = settings_path_in(tmp.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"sidebar": {"providers": []}}"#).unwrap();
+
+        let loaded = load_from_path(&path);
+
+        assert!(loaded.config.sidebar.providers.is_empty());
+    }
+
+    #[test]
+    fn load_from_path_dedupes_sidebar_providers_preserving_first_occurrence() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = settings_path_in(tmp.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"sidebar": {"providers": ["git.branch", "foo.bar", "git.branch"]}}"#,
+        )
+        .unwrap();
+
+        let loaded = load_from_path(&path);
+
+        assert_eq!(
+            loaded.config.sidebar.providers,
+            vec!["git.branch".to_string(), "foo.bar".to_string()]
+        );
+    }
+
+    #[test]
+    fn load_from_path_preserves_sidebar_provider_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = settings_path_in(tmp.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"sidebar": {"providers": ["b", "a"]}}"#).unwrap();
+
+        let loaded = load_from_path(&path);
+
+        assert_eq!(
+            loaded.config.sidebar.providers,
+            vec!["b".to_string(), "a".to_string()]
+        );
     }
 }
