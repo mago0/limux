@@ -9,6 +9,7 @@ mod shortcut_config;
 mod split_tree;
 mod terminal;
 mod window;
+mod workspace_context;
 
 use adw::prelude::*;
 use libadwaita as adw;
