@@ -797,6 +797,19 @@ row:selected .limux-ws-star-btn {
 row:selected .limux-ws-path {
     color: alpha(@window_fg_color, 0.5);
 }
+.limux-ctx-badges > label {
+    font-size: smaller;
+    opacity: 0.7;
+}
+.limux-ctx-git-branch {
+    font-family: "Symbols Nerd Font", "Symbols Nerd Font Mono",
+                 "JetBrainsMono Nerd Font", "FiraCode Nerd Font",
+                 "Hack Nerd Font", inherit;
+}
+.limux-ctx-git-branch-detached {
+    font-style: italic;
+    opacity: 0.55;
+}
 .limux-content {
     background-color: @window_bg_color;
 }
