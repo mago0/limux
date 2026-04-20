@@ -21,9 +21,17 @@ Always run cargo through the nix shell: `nix-shell --run '...'`. See `shell.nix`
 Completed:
 - [x] Task 1 - `SidebarConfig` added to `AppConfig`. Commit `cebc21a`.
 - [x] Task 2 - `workspace_context` module scaffolded (trait, registry, types, git_branch stub). Commit `699a3d1`.
+- [x] Task 3 - `detect_head` pure logic + 10-test matrix. Commit `d7d28e0`.
+- [x] Task 4 - `GitBranchProvider::evaluate` returning `ContextLine`. Commit `7f7b464`.
+- [x] Task 5 - `install_watchers` with `GFileMonitor` + drop-guard. Commit `12193bc`.
+- [x] Task 6 - `SidebarRowWidgets` struct refactor. Commit `d9a7892`.
+- [x] Task 7 - `Workspace` extended with `badges_row`/`badge_labels`/`context_watchers`. Commit `8318822`.
+- [x] Task 8 - `ProviderRegistry` built in `build_window`, refresh helper wired into both creation paths. Commit `9519910`.
+- [x] Task 9 - `on_pwd_changed` calls `trigger_workspace_context_refresh`. Commit `96e07ed`.
+- [x] Task 10 - CSS for `.limux-ctx-badges`, `.limux-ctx-git-branch`, `.limux-ctx-git-branch-detached`. Commit `a0c9a86`.
 - [x] Infra - `shell.nix` committed. Commit `1f807a8`.
 
-Pending: Tasks 3-12 below. Resume by dispatching an implementer subagent for Task 3 per `superpowers:subagent-driven-development`.
+Pending: Task 11 (manual QA walk-through, requires a graphical session) and Task 12 (final handoff/packaging). Task 12 steps 1-2 green: `./scripts/check.sh` passes on stable 1.94; no unintended files committed on-branch.
 
 Known issue out-of-scope for this PR: `cargo clippy -D warnings` fails under rustc 1.95 (current CI stable) with 4 new `collapsible_match` lints in `limux-core`. Pinning local dev to 1.94 sidesteps it; a separate tiny PR should fix the lints.
 
