@@ -53,6 +53,18 @@ struct Workspace {
     /// Path label shown below workspace name in sidebar.
     #[allow(dead_code)]
     path_label: gtk::Label,
+    /// Horizontal container below the path label for provider badges.
+    #[allow(dead_code)]
+    badges_row: gtk::Box,
+    /// Badge labels keyed by provider id (e.g. "git.branch"). Labels are reused
+    /// across evaluations to avoid widget-tree churn.
+    #[allow(dead_code)]
+    badge_labels: std::collections::HashMap<&'static str, gtk::Label>,
+    /// Watcher handles for installed providers. Dropping a handle cancels its
+    /// GFileMonitor; clearing the vec tears them all down. Drop order matters:
+    /// watchers must be cleared before the badges_row widget is removed.
+    #[allow(dead_code)]
+    context_watchers: Vec<Box<dyn crate::workspace_context::WatcherHandle>>,
 }
 
 pub(crate) struct AppState {
@@ -1898,6 +1910,7 @@ pub(super) struct SidebarRowWidgets {
     pub notify_dot: gtk::Label,
     pub notify_label: gtk::Label,
     pub path_label: gtk::Label,
+    pub badges_row: gtk::Box,
 }
 
 fn build_sidebar_row(name: &str, folder_path: Option<&str>) -> SidebarRowWidgets {
@@ -1947,6 +1960,14 @@ fn build_sidebar_row(name: &str, folder_path: Option<&str>) -> SidebarRowWidgets
         .build();
     notify_label.add_css_class("limux-notify-msg");
 
+    let badges_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(6)
+        .margin_start(8)
+        .visible(false)
+        .build();
+    badges_row.add_css_class("limux-ctx-badges");
+
     let vbox = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(2)
@@ -1954,6 +1975,7 @@ fn build_sidebar_row(name: &str, folder_path: Option<&str>) -> SidebarRowWidgets
     vbox.add_css_class("limux-sidebar-row-box");
     vbox.append(&top_row);
     vbox.append(&path_label);
+    vbox.append(&badges_row);
     vbox.append(&notify_label);
 
     let row = gtk::ListBoxRow::new();
@@ -1966,6 +1988,7 @@ fn build_sidebar_row(name: &str, folder_path: Option<&str>) -> SidebarRowWidgets
         notify_dot,
         notify_label,
         path_label,
+        badges_row,
     }
 }
 
@@ -2496,6 +2519,7 @@ fn create_workspace_for_tab(state: &State, payload: &str) -> bool {
         notify_dot,
         notify_label,
         path_label,
+        badges_row,
     } = build_sidebar_row(&seed.name, seed.folder_path.as_deref());
     let row_clone = row.clone();
     {
@@ -2519,6 +2543,9 @@ fn create_workspace_for_tab(state: &State, payload: &str) -> bool {
             cwd: Rc::new(RefCell::new(seed.cwd.clone())),
             folder_path: seed.folder_path.clone(),
             path_label,
+            badges_row,
+            badge_labels: std::collections::HashMap::new(),
+            context_watchers: Vec::new(),
         });
         app_state.active_idx = app_state.workspaces.len() - 1;
         app_state.stack.set_visible_child_name(&stack_name);
@@ -3071,6 +3098,7 @@ fn add_workspace_from_state(state: &State, workspace: &WorkspaceState) {
         notify_dot,
         notify_label,
         path_label,
+        badges_row,
     } = build_sidebar_row(&workspace.name, workspace.folder_path.as_deref());
     sidebar_list.append(&row);
     install_workspace_row_interactions(state, &id, &row, &favorite_button);
@@ -3091,6 +3119,9 @@ fn add_workspace_from_state(state: &State, workspace: &WorkspaceState) {
         cwd,
         folder_path: workspace.folder_path.clone(),
         path_label,
+        badges_row,
+        badge_labels: std::collections::HashMap::new(),
+        context_watchers: Vec::new(),
     };
 
     if workspace.favorite {
