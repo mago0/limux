@@ -1,7 +1,11 @@
-//! Git branch / detached HEAD provider. Implementation lands across tasks 3-5.
+//! Git branch / detached HEAD provider.
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+
+use gtk::gio;
+use gtk::prelude::*;
+use gtk4 as gtk;
 
 use super::{
     ContextLine, NullWatcherHandle, WatcherHandle, WorkspaceContext, WorkspaceContextProvider,
@@ -118,10 +122,41 @@ impl WorkspaceContextProvider for GitBranchProvider {
 
     fn install_watchers(
         &self,
-        _ctx: &WorkspaceContext,
-        _notify: Rc<dyn Fn()>,
+        ctx: &WorkspaceContext,
+        notify: Rc<dyn Fn()>,
     ) -> Box<dyn WatcherHandle> {
-        Box::new(NullWatcherHandle) // Replaced in Task 5.
+        self.install(ctx, notify)
+            .unwrap_or_else(|| Box::new(NullWatcherHandle))
+    }
+}
+
+struct GitWatcherHandle {
+    monitor: gio::FileMonitor,
+}
+
+impl WatcherHandle for GitWatcherHandle {}
+
+impl Drop for GitWatcherHandle {
+    fn drop(&mut self) {
+        self.monitor.cancel();
+    }
+}
+
+impl GitBranchProvider {
+    fn install(
+        &self,
+        ctx: &WorkspaceContext,
+        notify: Rc<dyn Fn()>,
+    ) -> Option<Box<dyn WatcherHandle>> {
+        let start = ctx.cwd.as_deref().or(ctx.folder_path.as_deref())?;
+        let (_, head_path) = detect_head(start)?;
+        let file = gio::File::for_path(&head_path);
+        let monitor = file
+            .monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+            .ok()?;
+        let notify_for_signal = notify.clone();
+        monitor.connect_changed(move |_, _, _, _| notify_for_signal());
+        Some(Box::new(GitWatcherHandle { monitor }))
     }
 }
 
