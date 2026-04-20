@@ -3315,10 +3315,15 @@ pub(crate) fn create_pane_for_workspace(
             let ws_id = ws_id_pwd.clone();
             let pwd = pwd.to_string();
             glib::idle_add_local_once(move || {
-                let s = state.borrow();
-                if let Some(ws) = s.workspaces.iter().find(|w| w.id == ws_id) {
-                    *ws.cwd.borrow_mut() = Some(pwd);
+                {
+                    let s = state.borrow();
+                    if let Some(ws) = s.workspaces.iter().find(|w| w.id == ws_id) {
+                        *ws.cwd.borrow_mut() = Some(pwd);
+                    } else {
+                        return;
+                    }
                 }
+                trigger_workspace_context_refresh(&state, &ws_id);
             });
         }),
         on_empty: Box::new(move |pane_widget, reason| {
