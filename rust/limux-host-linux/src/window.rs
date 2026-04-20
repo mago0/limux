@@ -1891,17 +1891,16 @@ fn activate_last_workspace_shortcut(state: &State) {
 // Sidebar row
 // ---------------------------------------------------------------------------
 
-fn build_sidebar_row(
-    name: &str,
-    folder_path: Option<&str>,
-) -> (
-    gtk::ListBoxRow,
-    gtk::Label,
-    gtk::Button,
-    gtk::Label,
-    gtk::Label,
-    gtk::Label,
-) {
+pub(super) struct SidebarRowWidgets {
+    pub row: gtk::ListBoxRow,
+    pub name_label: gtk::Label,
+    pub favorite_button: gtk::Button,
+    pub notify_dot: gtk::Label,
+    pub notify_label: gtk::Label,
+    pub path_label: gtk::Label,
+}
+
+fn build_sidebar_row(name: &str, folder_path: Option<&str>) -> SidebarRowWidgets {
     let notify_dot = gtk::Label::builder().label("\u{25CF}").build();
     notify_dot.add_css_class("limux-notify-dot-hidden");
 
@@ -1960,14 +1959,14 @@ fn build_sidebar_row(
     let row = gtk::ListBoxRow::new();
     row.set_child(Some(&vbox));
 
-    (
+    SidebarRowWidgets {
         row,
         name_label,
         favorite_button,
         notify_dot,
         notify_label,
         path_label,
-    )
+    }
 }
 
 /// Abbreviate a path by replacing the home directory with ~.
@@ -2490,8 +2489,14 @@ fn create_workspace_for_tab(state: &State, payload: &str) -> bool {
     let split_container = SplitTreeContainer::new(state, pane.clone().upcast());
     let root = split_container.widget().clone();
 
-    let (row, name_label, favorite_button, notify_dot, notify_label, path_label) =
-        build_sidebar_row(&seed.name, seed.folder_path.as_deref());
+    let SidebarRowWidgets {
+        row,
+        name_label,
+        favorite_button,
+        notify_dot,
+        notify_label,
+        path_label,
+    } = build_sidebar_row(&seed.name, seed.folder_path.as_deref());
     let row_clone = row.clone();
     {
         let mut app_state = state.borrow_mut();
@@ -3059,8 +3064,14 @@ fn add_workspace_from_state(state: &State, workspace: &WorkspaceState) {
         build_workspace_root(state, &shortcuts, &id, working_dir, &workspace.layout);
     stack.add_named(&root, Some(&stack_name));
 
-    let (row, name_label, favorite_button, notify_dot, notify_label, path_label) =
-        build_sidebar_row(&workspace.name, workspace.folder_path.as_deref());
+    let SidebarRowWidgets {
+        row,
+        name_label,
+        favorite_button,
+        notify_dot,
+        notify_label,
+        path_label,
+    } = build_sidebar_row(&workspace.name, workspace.folder_path.as_deref());
     sidebar_list.append(&row);
     install_workspace_row_interactions(state, &id, &row, &favorite_button);
 
