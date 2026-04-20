@@ -93,8 +93,27 @@ impl WorkspaceContextProvider for GitBranchProvider {
         "git.branch"
     }
 
-    fn evaluate(&self, _ctx: &WorkspaceContext) -> Option<ContextLine> {
-        None // Implemented in Task 4.
+    fn evaluate(&self, ctx: &WorkspaceContext) -> Option<ContextLine> {
+        let start = ctx.cwd.as_deref().or(ctx.folder_path.as_deref())?;
+        let (state, _) = detect_head(start)?;
+        match state {
+            HeadState::Branch(name) => Some(ContextLine {
+                icon: Some("\u{F418}"),
+                text: name.clone(),
+                tooltip: Some(format!("branch: {name}")),
+                css_class: Some("limux-ctx-git-branch"),
+            }),
+            HeadState::Detached(sha) => {
+                let short_len = 7.min(sha.len());
+                Some(ContextLine {
+                    icon: Some("\u{F418}"),
+                    text: sha[..short_len].to_string(),
+                    tooltip: Some(format!("detached HEAD at {sha}")),
+                    css_class: Some("limux-ctx-git-branch-detached"),
+                })
+            }
+            HeadState::None => None,
+        }
     }
 
     fn install_watchers(
@@ -224,5 +243,74 @@ mod tests {
         symlink(&repo, &link).unwrap();
         let (state, _) = detect_head(&link).expect("detected");
         assert_eq!(state, HeadState::Branch("main".to_string()));
+    }
+
+    #[test]
+    fn evaluate_branch_produces_nerdfont_context_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join(".git/HEAD"), "ref: refs/heads/main\n");
+        let provider = GitBranchProvider::new();
+        let line = provider
+            .evaluate(&WorkspaceContext {
+                workspace_id: "ws".to_string(),
+                cwd: Some(root.to_path_buf()),
+                folder_path: None,
+            })
+            .expect("line");
+        assert_eq!(line.icon, Some("\u{F418}"));
+        assert_eq!(line.text, "main");
+        assert_eq!(line.tooltip.as_deref(), Some("branch: main"));
+        assert_eq!(line.css_class, Some("limux-ctx-git-branch"));
+    }
+
+    #[test]
+    fn evaluate_detached_produces_short_sha_and_detached_class() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        write(&root.join(".git/HEAD"), &format!("{sha}\n"));
+        let provider = GitBranchProvider::new();
+        let line = provider
+            .evaluate(&WorkspaceContext {
+                workspace_id: "ws".to_string(),
+                cwd: Some(root.to_path_buf()),
+                folder_path: None,
+            })
+            .expect("line");
+        assert_eq!(line.text, "0123456");
+        assert_eq!(line.css_class, Some("limux-ctx-git-branch-detached"));
+        assert_eq!(
+            line.tooltip.as_deref(),
+            Some("detached HEAD at 0123456789abcdef0123456789abcdef01234567"),
+        );
+    }
+
+    #[test]
+    fn evaluate_falls_back_to_folder_path_when_cwd_is_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join(".git/HEAD"), "ref: refs/heads/main\n");
+        let provider = GitBranchProvider::new();
+        let line = provider
+            .evaluate(&WorkspaceContext {
+                workspace_id: "ws".to_string(),
+                cwd: None,
+                folder_path: Some(root.to_path_buf()),
+            })
+            .expect("line");
+        assert_eq!(line.text, "main");
+    }
+
+    #[test]
+    fn evaluate_returns_none_when_no_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let provider = GitBranchProvider::new();
+        let result = provider.evaluate(&WorkspaceContext {
+            workspace_id: "ws".to_string(),
+            cwd: Some(tmp.path().to_path_buf()),
+            folder_path: None,
+        });
+        assert!(result.is_none());
     }
 }
