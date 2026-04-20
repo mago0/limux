@@ -54,16 +54,12 @@ struct Workspace {
     #[allow(dead_code)]
     path_label: gtk::Label,
     /// Horizontal container below the path label for provider badges.
-    #[allow(dead_code)]
     badges_row: gtk::Box,
     /// Badge labels keyed by provider id (e.g. "git.branch"). Labels are reused
     /// across evaluations to avoid widget-tree churn.
-    #[allow(dead_code)]
     badge_labels: std::collections::HashMap<&'static str, gtk::Label>,
     /// Watcher handles for installed providers. Dropping a handle cancels its
-    /// GFileMonitor; clearing the vec tears them all down. Drop order matters:
-    /// watchers must be cleared before the badges_row widget is removed.
-    #[allow(dead_code)]
+    /// GFileMonitor; clearing the vec tears them all down.
     context_watchers: Vec<Box<dyn crate::workspace_context::WatcherHandle>>,
 }
 
@@ -77,6 +73,7 @@ pub(crate) struct AppState {
     workspaces: Vec<Workspace>,
     active_idx: usize,
     shortcuts: Rc<ResolvedShortcutConfig>,
+    workspace_context_registry: Rc<crate::workspace_context::ProviderRegistry>,
     stack: gtk::Stack,
     sidebar_list: gtk::ListBox,
     paned: gtk::Paned,
@@ -229,6 +226,84 @@ trait SessionSaveAccess {
     fn persistence_suspended(&self) -> bool;
     fn save_queued(&self) -> bool;
     fn set_save_queued(&mut self, queued: bool);
+}
+
+fn refresh_workspace_context(
+    workspace: &mut Workspace,
+    registry: &crate::workspace_context::ProviderRegistry,
+    notify_cb: Rc<dyn Fn()>,
+) {
+    use crate::workspace_context::WorkspaceContext;
+    use gtk::pango::EllipsizeMode;
+
+    // Drop old watchers first so late callbacks don't fire against reused labels.
+    workspace.context_watchers.clear();
+
+    let cwd = workspace.cwd.borrow().clone().map(std::path::PathBuf::from);
+    let folder_path = workspace.folder_path.clone().map(std::path::PathBuf::from);
+    let ctx = WorkspaceContext {
+        workspace_id: workspace.id.clone(),
+        cwd,
+        folder_path,
+    };
+
+    let mut any_visible = false;
+    for provider in registry.providers() {
+        let id = provider.id();
+        let line = provider.evaluate(&ctx);
+
+        if !workspace.badge_labels.contains_key(id) {
+            let l = gtk::Label::builder()
+                .xalign(0.0)
+                .ellipsize(EllipsizeMode::End)
+                .visible(false)
+                .build();
+            workspace.badges_row.append(&l);
+            workspace.badge_labels.insert(id, l);
+        }
+        let label = workspace.badge_labels.get(id).expect("inserted above");
+
+        if let Some(line) = line {
+            let shown = match line.icon {
+                Some(icon) => format!("{icon} {}", line.text),
+                None => line.text.clone(),
+            };
+            label.set_label(&shown);
+            label.set_tooltip_text(line.tooltip.as_deref());
+            for class in label.css_classes() {
+                if class.starts_with("limux-ctx-") {
+                    label.remove_css_class(&class);
+                }
+            }
+            if let Some(css) = line.css_class {
+                label.add_css_class(css);
+            }
+            label.set_visible(true);
+            any_visible = true;
+        } else {
+            label.set_visible(false);
+        }
+
+        workspace
+            .context_watchers
+            .push(provider.install_watchers(&ctx, notify_cb.clone()));
+    }
+
+    workspace.badges_row.set_visible(any_visible);
+}
+
+fn trigger_workspace_context_refresh(state: &State, workspace_id: &str) {
+    let registry = state.borrow().workspace_context_registry.clone();
+    let ws_id = workspace_id.to_string();
+    let state_for_closure = state.clone();
+    let ws_id_for_closure = ws_id.clone();
+    let notify: Rc<dyn Fn()> = Rc::new(move || {
+        trigger_workspace_context_refresh(&state_for_closure, &ws_id_for_closure);
+    });
+    let mut app_state = state.borrow_mut();
+    if let Some(ws) = app_state.workspaces.iter_mut().find(|w| w.id == ws_id) {
+        refresh_workspace_context(ws, &registry, notify);
+    }
 }
 
 impl SessionSaveAccess for AppState {
@@ -754,6 +829,19 @@ pub fn build_window(app: &adw::Application) {
         eprintln!("limux: {warning}");
     }
 
+    let workspace_context_registry = Rc::new(
+        crate::workspace_context::ProviderRegistry::from_config(&config.borrow().sidebar.providers),
+    );
+    eprintln!(
+        "limux: sidebar: enabled providers: [{}]",
+        workspace_context_registry
+            .providers()
+            .iter()
+            .map(|p| p.id())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
     // Load CSS
     let provider = gtk::CssProvider::new();
     let all_css = format!(
@@ -948,6 +1036,7 @@ pub fn build_window(app: &adw::Application) {
         workspaces: Vec::new(),
         active_idx: 0,
         shortcuts,
+        workspace_context_registry: workspace_context_registry.clone(),
         stack: stack.clone(),
         sidebar_list: sidebar_list.clone(),
         paned: main_paned.clone(),
@@ -2551,6 +2640,8 @@ fn create_workspace_for_tab(state: &State, payload: &str) -> bool {
         app_state.stack.set_visible_child_name(&stack_name);
     }
 
+    trigger_workspace_context_refresh(state, &new_workspace_id);
+
     {
         let sidebar_list = state.borrow().sidebar_list.clone();
         sidebar_list.select_row(Some(&row_clone));
@@ -3104,6 +3195,7 @@ fn add_workspace_from_state(state: &State, workspace: &WorkspaceState) {
     install_workspace_row_interactions(state, &id, &row, &favorite_button);
 
     let cwd: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(workspace.cwd.clone()));
+    let ws_id_for_refresh = id.clone();
     let ws = Workspace {
         id,
         name: workspace.name.clone(),
@@ -3133,6 +3225,8 @@ fn add_workspace_from_state(state: &State, workspace: &WorkspaceState) {
         s.workspaces.push(ws);
         s.active_idx = s.workspaces.len() - 1;
     }
+
+    trigger_workspace_context_refresh(state, &ws_id_for_refresh);
 
     stack.set_visible_child_name(&stack_name);
     sidebar_list.select_row(Some(&row));
